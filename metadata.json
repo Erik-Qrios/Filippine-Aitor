@@ -1,0 +1,7 @@
+{
+  "name": "Filippine Aitor",
+  "description": "Een interactieve Filippine woordpuzzel voor studenten Toegepaste Taalkunde, met spraakondersteuning en responsief design.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
