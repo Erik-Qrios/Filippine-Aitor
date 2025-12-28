@@ -1,8 +1,9 @@
+
 import { PuzzleData, PuzzleRow, WordEntry } from '../types';
 import { VOCABULARY } from './wordData';
 import { parseTokens } from './utils';
 
-export const generatePuzzle = (): PuzzleData => {
+export const generatePuzzle = (density: number = 0.65): PuzzleData => {
   // 1. Kies een verticaal oplossingswoord.
   const potentialSolutions = VOCABULARY.filter(w => {
     const t = parseTokens(w.word);
@@ -76,38 +77,31 @@ export const generatePuzzle = (): PuzzleData => {
   });
 
   // 4. Bepaal welke specifieke vakjes een nummer tonen
-  // Strategie: Garandeer dat elke letter minstens 1x een nummer heeft in de puzzel.
-  const tokenAssignedOnce = new Set<string>();
-  
-  // Maak eerst een platte lijst van alle posities om willekeurig te kunnen kiezen voor de "verplichte" nummers
+  const forcedNumbers = new Set<string>(); // "row-col" strings
   const allPositions: {rIdx: number, cIdx: number, token: string}[] = [];
   rawRows.forEach((r, rIdx) => {
     r.tokens.forEach((t: string, cIdx: number) => {
       allPositions.push({rIdx, cIdx, token: t});
     });
   });
-  // Shuffle posities
-  allPositions.sort(() => Math.random() - 0.5);
-
-  const forcedNumbers = new Set<string>(); // "row-col" strings
-
-  // Loop door unieke tokens en dwing er minstens één af
+  
+  // Garandeer dat elk token minstens 1x voorkomt
   uniqueTokens.forEach(token => {
     const pos = allPositions.find(p => p.token === token);
-    if (pos) {
-      forcedNumbers.add(`${pos.rIdx}-${pos.cIdx}`);
-    }
+    if (pos) forcedNumbers.add(`${allPositions.indexOf(pos)}`);
   });
 
   const rows: PuzzleRow[] = rawRows.map((r, rIdx) => ({
     ...r,
     tokenNumbers: r.tokens.map((t: string, cIdx: number) => {
-      // Als dit de "geforceerde" positie is voor dit teken, geef nummer.
-      if (forcedNumbers.has(`${rIdx}-${cIdx}`)) {
-        return tokenToNumber[t];
-      }
-      // Anders 35% kans (iets lager dan 50% omdat we al tekens hebben afgedwongen)
-      return Math.random() < 0.35 ? tokenToNumber[t] : null;
+      // Gebruik de density parameter voor de kans op een cijfer
+      const isForced = Array.from(forcedNumbers).some(idxStr => {
+          const idx = parseInt(idxStr);
+          const p = allPositions[idx];
+          return p.rIdx === rIdx && p.cIdx === cIdx;
+      });
+      if (isForced) return tokenToNumber[t];
+      return Math.random() < density ? tokenToNumber[t] : null;
     }),
     displayOffset: 0
   }));
