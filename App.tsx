@@ -1,13 +1,15 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { generatePuzzle } from './services/puzzleGenerator';
+import { VOCABULARY } from './services/wordData';
 import { PuzzleData, KeyboardLayout } from './types';
 import VirtualKeyboard from './components/VirtualKeyboard';
 import GameControls from './components/GameControls';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Info } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").concat(["IJ"]);
+const STORAGE_KEY = 'filippine_usage_stats';
 
 const App: React.FC = () => {
   const [puzzle, setPuzzle] = useState<PuzzleData | null>(null);
@@ -21,25 +23,49 @@ const App: React.FC = () => {
   const [isKeyboardVisible, setKeyboardVisible] = useState(true);
   const [density, setDensity] = useState(0.7);
   
+  const [usageCounts, setUsageCounts] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // Bereken voortgang voor de UI
+  const discoveredWordsCount = useMemo(() => {
+    return Object.keys(usageCounts).length;
+  }, [usageCounts]);
+
   const stateRef = useRef({
     currentRowIdx,
     currentColIdx,
     gameState,
     puzzle,
-    gridState
+    gridState,
+    usageCounts
   });
 
   useEffect(() => {
-    stateRef.current = { currentRowIdx, currentColIdx, gameState, puzzle, gridState };
-  }, [currentRowIdx, currentColIdx, gameState, puzzle, gridState]);
+    stateRef.current = { currentRowIdx, currentColIdx, gameState, puzzle, gridState, usageCounts };
+  }, [currentRowIdx, currentColIdx, gameState, puzzle, gridState, usageCounts]);
 
   useEffect(() => {
-    if (window.innerWidth < 1024) setKeyboardVisible(true);
-  }, []);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(usageCounts));
+  }, [usageCounts]);
+
+  const updateUsageForPuzzle = (p: PuzzleData) => {
+    setUsageCounts(prev => {
+      const next = { ...prev };
+      const words = [p.solutionWord, ...p.rows.map(r => r.word)];
+      words.forEach(word => {
+        const key = word.toLowerCase();
+        next[key] = (next[key] || 0) + 1;
+      });
+      return next;
+    });
+  };
 
   const startNewGame = useCallback(() => {
-    const newPuzzle = generatePuzzle(density);
+    const newPuzzle = generatePuzzle(density, stateRef.current.usageCounts);
     setPuzzle(newPuzzle);
+    updateUsageForPuzzle(newPuzzle);
     setGridState(newPuzzle.rows.map(row => Array(row.tokens.length).fill('')));
     setCorrectRows(new Array(newPuzzle.rows.length).fill(false));
     setCurrentRowIdx(0);
@@ -48,11 +74,16 @@ const App: React.FC = () => {
     setGameState('playing');
   }, [density]);
 
+  // Initial load
   useEffect(() => {
-    const newPuzzle = generatePuzzle(0.7);
-    setPuzzle(newPuzzle);
-    setGridState(newPuzzle.rows.map(row => Array(row.tokens.length).fill('')));
-    setCorrectRows(new Array(newPuzzle.rows.length).fill(false));
+    if (!puzzle) {
+      const counts = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      const newPuzzle = generatePuzzle(0.7, counts);
+      setPuzzle(newPuzzle);
+      updateUsageForPuzzle(newPuzzle);
+      setGridState(newPuzzle.rows.map(row => Array(row.tokens.length).fill('')));
+      setCorrectRows(new Array(newPuzzle.rows.length).fill(false));
+    }
   }, []);
 
   useEffect(() => {
@@ -220,18 +251,25 @@ const App: React.FC = () => {
     <div className="h-screen w-full bg-slate-300 flex flex-col items-center overflow-hidden font-sans">
       <div className="w-full max-w-2xl bg-white shadow-2xl flex flex-col h-full relative border-x border-slate-400">
         
-        <header className="bg-blue-600 text-white p-2.5 flex justify-between items-center flex-shrink-0 z-30 shadow-lg">
-          <div className="flex items-center gap-2.5">
+        <header className="bg-blue-600 text-white p-2 flex justify-between items-center flex-shrink-0 z-30 shadow-lg">
+          <div className="flex items-center gap-2">
             <div className="bg-white/20 p-1 rounded-lg">
-              <CheckCircle2 size={18} className="text-white" />
+              <CheckCircle2 size={16} className="text-white" />
             </div>
             <div>
-              <h1 className="text-sm font-black leading-tight tracking-tight uppercase">Filippine Aitor</h1>
-              <p className="text-blue-100 text-[9px] uppercase font-black tracking-widest opacity-80">UA Toegepaste Taalkunde</p>
+              <h1 className="text-xs font-black leading-none tracking-tight uppercase">Filippine Aitor</h1>
+              <p className="text-blue-100 text-[8px] uppercase font-black tracking-widest opacity-80 mt-0.5">UA Toegepaste Taalkunde</p>
             </div>
           </div>
-          <div className="bg-blue-800/50 backdrop-blur-sm px-3 py-1 rounded-full text-[11px] font-mono font-bold border border-white/20">
-            {Math.floor(timer/60)}:{(timer%60).toString().padStart(2,'0')}
+
+          <div className="flex gap-2">
+            <div className="bg-blue-800/40 backdrop-blur-sm px-2 py-1 rounded-md text-[9px] font-bold border border-white/10 flex items-center gap-1.5">
+              <Info size={10} className="text-blue-200" />
+              <span className="text-white/90">ONTDEKT: <span className="text-white">{discoveredWordsCount}</span> / {VOCABULARY.length}</span>
+            </div>
+            <div className="bg-blue-800/50 backdrop-blur-sm px-2 py-1 rounded-md text-[10px] font-mono font-bold border border-white/20">
+              {Math.floor(timer/60)}:{(timer%60).toString().padStart(2,'0')}
+            </div>
           </div>
         </header>
 
@@ -308,7 +346,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Alfabet Mapping Legende in 2 Lijnen - Terug naar Geel/Amber */}
         <div className="bg-gradient-to-b from-yellow-50/90 to-amber-50/80 border-t border-slate-200 p-2 flex-shrink-0 shadow-inner">
            <div className="max-w-full mx-auto flex flex-col gap-1">
               <div className="flex justify-center gap-0.5 w-full">
