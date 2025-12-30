@@ -5,13 +5,23 @@ import { VOCABULARY } from './services/wordData';
 import { PuzzleData, KeyboardLayout } from './types';
 import VirtualKeyboard from './components/VirtualKeyboard';
 import GameControls from './components/GameControls';
-import { CheckCircle2, Info } from 'lucide-react';
+import { CheckCircle2, List, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").concat(["IJ"]);
-const STORAGE_KEY = 'filippine_usage_stats';
+const HISTORY_KEY = 'filippine_history_v1';
 
 const App: React.FC = () => {
+  // --- 1. HISTORIEK BEHEER ---
+  const [history, setHistory] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(HISTORY_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
   const [puzzle, setPuzzle] = useState<PuzzleData | null>(null);
   const [gridState, setGridState] = useState<string[][]>([]);
   const [correctRows, setCorrectRows] = useState<boolean[]>([]);
@@ -22,50 +32,36 @@ const App: React.FC = () => {
   const [layout, setLayout] = useState<KeyboardLayout>('AZERTY');
   const [isKeyboardVisible, setKeyboardVisible] = useState(true);
   const [density, setDensity] = useState(0.7);
-  
-  const [usageCounts, setUsageCounts] = useState<Record<string, number>>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [isHistoryOpen, setHistoryOpen] = useState(false);
 
-  // Bereken voortgang voor de UI
-  const discoveredWordsCount = useMemo(() => {
-    return Object.keys(usageCounts).length;
-  }, [usageCounts]);
+  // De teller is direct gekoppeld aan de history state
+  const discoveredWordsCount = useMemo(() => new Set(history).size, [history]);
 
-  const stateRef = useRef({
-    currentRowIdx,
-    currentColIdx,
-    gameState,
-    puzzle,
-    gridState,
-    usageCounts
-  });
-
+  // Sync naar storage bij elke wijziging
   useEffect(() => {
-    stateRef.current = { currentRowIdx, currentColIdx, gameState, puzzle, gridState, usageCounts };
-  }, [currentRowIdx, currentColIdx, gameState, puzzle, gridState, usageCounts]);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  }, [history]);
 
+  const stateRef = useRef({ currentRowIdx, currentColIdx, gameState, puzzle, gridState, history });
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(usageCounts));
-  }, [usageCounts]);
+    stateRef.current = { currentRowIdx, currentColIdx, gameState, puzzle, gridState, history };
+  }, [currentRowIdx, currentColIdx, gameState, puzzle, gridState, history]);
 
-  const updateUsageForPuzzle = (p: PuzzleData) => {
-    setUsageCounts(prev => {
-      const next = { ...prev };
-      const words = [p.solutionWord, ...p.rows.map(r => r.word)];
-      words.forEach(word => {
-        const key = word.toLowerCase();
-        next[key] = (next[key] || 0) + 1;
-      });
-      return next;
-    });
+  // --- 2. DE VERBETERDE RESET FUNCTIE (VOORSTEL A) ---
+  const handleNuclearReset = () => {
+    const bevestig = window.confirm("WAARSCHUWING: Dit wist al je voortgang en zet de teller op 0. De app zal herstarten.");
+    if (bevestig) {
+      localStorage.clear();
+      window.location.reload();
+    }
   };
 
   const startNewGame = useCallback(() => {
-    const newPuzzle = generatePuzzle(density, stateRef.current.usageCounts);
+    const usedWordsMap: Record<string, number> = {};
+    stateRef.current.history.forEach(w => { usedWordsMap[w.toLowerCase()] = 1; });
+    
+    const newPuzzle = generatePuzzle(density, usedWordsMap);
     setPuzzle(newPuzzle);
-    updateUsageForPuzzle(newPuzzle);
     setGridState(newPuzzle.rows.map(row => Array(row.tokens.length).fill('')));
     setCorrectRows(new Array(newPuzzle.rows.length).fill(false));
     setCurrentRowIdx(0);
@@ -74,13 +70,51 @@ const App: React.FC = () => {
     setGameState('playing');
   }, [density]);
 
+  const handleClearGrid = () => {
+    if (puzzle) {
+      setGridState(puzzle.rows.map(r => Array(r.tokens.length).fill('')));
+      setCurrentRowIdx(0);
+      setCurrentColIdx(0);
+    }
+  };
+
+  const updateHistory = (p: PuzzleData) => {
+    setHistory(prev => {
+      const newWords = [p.solutionWord.toLowerCase(), ...p.rows.map(r => r.word.toLowerCase())];
+      const nextHistory = [...prev];
+      newWords.forEach(w => {
+        if (!nextHistory.includes(w)) nextHistory.push(w);
+      });
+      return nextHistory;
+    });
+  };
+
+  const handleNextUnfinishedWord = useCallback(() => {
+    const { puzzle, gridState, currentRowIdx } = stateRef.current;
+    if (!puzzle) return;
+
+    const rowCount = puzzle.rows.length;
+    for (let i = 1; i <= rowCount; i++) {
+      const checkIdx = (currentRowIdx + i) % rowCount;
+      const firstEmpty = gridState[checkIdx].indexOf('');
+      if (firstEmpty !== -1) {
+        setCurrentRowIdx(checkIdx);
+        setCurrentColIdx(firstEmpty);
+        return;
+      }
+    }
+    // Als alle rijen vol zijn maar het spel nog niet gewonnen (bijv. fouten), spring naar de eerste cel van de volgende rij
+    setCurrentRowIdx((currentRowIdx + 1) % rowCount);
+    setCurrentColIdx(0);
+  }, []);
+
   // Initial load
   useEffect(() => {
     if (!puzzle) {
-      const counts = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-      const newPuzzle = generatePuzzle(0.7, counts);
+      const usedWordsMap: Record<string, number> = {};
+      history.forEach(w => { usedWordsMap[w.toLowerCase()] = 1; });
+      const newPuzzle = generatePuzzle(0.7, usedWordsMap);
       setPuzzle(newPuzzle);
-      updateUsageForPuzzle(newPuzzle);
       setGridState(newPuzzle.rows.map(row => Array(row.tokens.length).fill('')));
       setCorrectRows(new Array(newPuzzle.rows.length).fill(false));
     }
@@ -94,16 +128,9 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [gameState]);
 
-  const toggleKeyboardCycle = useCallback(() => {
-    if (!isKeyboardVisible) {
-      setKeyboardVisible(true);
-      setLayout('AZERTY');
-    } else if (layout === 'AZERTY') {
-      setLayout('QWERTY');
-    } else {
-      setKeyboardVisible(false);
-    }
-  }, [isKeyboardVisible, layout]);
+  const toggleKeyboardLayout = useCallback(() => {
+    setLayout(prev => prev === 'AZERTY' ? 'QWERTY' : 'AZERTY');
+  }, []);
 
   const handleCellChange = useCallback((rowIdx: number, colIdx: number, val: string) => {
     const { gameState, puzzle, gridState } = stateRef.current;
@@ -214,6 +241,7 @@ const App: React.FC = () => {
        setCorrectRows(newCorrectRows);
        if (newCorrectRows.every(Boolean)) {
          setGameState('won');
+         updateHistory(puzzle);
          confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
        }
     }
@@ -230,7 +258,6 @@ const App: React.FC = () => {
   const revealedMappings = useMemo(() => {
     const mappings: Record<string, number> = {};
     if (!puzzle) return mappings;
-    
     for (let r = 0; r < gridState.length; r++) {
       for (let c = 0; c < gridState[r].length; c++) {
         const userChar = gridState[r][c];
@@ -263,21 +290,28 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex gap-2">
-            <div className="bg-blue-800/40 backdrop-blur-sm px-2 py-1 rounded-md text-[9px] font-bold border border-white/10 flex items-center gap-1.5">
-              <Info size={10} className="text-blue-200" />
-              <span className="text-white/90">ONTDEKT: <span className="text-white">{discoveredWordsCount}</span> / {VOCABULARY.length}</span>
-            </div>
-            <div className="bg-blue-800/50 backdrop-blur-sm px-2 py-1 rounded-md text-[10px] font-mono font-bold border border-white/20">
+            <button 
+              onClick={() => setHistoryOpen(true)}
+              className="bg-blue-800/40 backdrop-blur-sm px-2 py-1 rounded-md text-[9px] font-normal border border-white/10 flex items-center gap-1.5 hover:bg-blue-800/60 transition-colors"
+            >
+              <List size={10} className="text-blue-200" />
+              <span className="text-white/90">Woorden: <span className="text-white">{discoveredWordsCount}</span> / {VOCABULARY.length}</span>
+            </button>
+            <div className="bg-blue-800/50 backdrop-blur-sm px-2 py-1 rounded-md text-[10px] font-mono font-bold border border-white/20 flex items-center">
               {Math.floor(timer/60)}:{(timer%60).toString().padStart(2,'0')}
             </div>
           </div>
         </header>
 
         <GameControls 
-          onNewGame={startNewGame} onReset={() => setGridState(puzzle.rows.map(r => Array(r.tokens.length).fill('')))}
-          onHint={handleHint} onCheck={() => {}} 
-          isKeyboardVisible={isKeyboardVisible} layout={layout} toggleKeyboard={toggleKeyboardCycle}
-          density={density} setDensity={setDensity}
+          onNewGame={startNewGame} 
+          onReset={handleClearGrid}
+          onHint={handleHint} 
+          onNextWord={handleNextUnfinishedWord}
+          onCheck={() => {}} 
+          isKeyboardVisible={isKeyboardVisible} 
+          density={density} 
+          setDensity={setDensity}
         />
 
         <div className="bg-yellow-200/60 border-b border-yellow-300 py-1.5 px-3.5 flex-shrink-0 backdrop-blur-sm shadow-[inset_0_-1px_3px_rgba(0,0,0,0.02)]">
@@ -301,11 +335,9 @@ const App: React.FC = () => {
                 <div className={`w-5 text-center text-[8px] font-black flex-shrink-0 transition-colors ${correctRows[rIdx] ? 'text-green-500' : 'text-slate-300'}`}>
                   {rIdx + 1}
                 </div>
-                
                 {Array.from({ length: maxLeft - row.solutionIndex }).map((_, i) => (
                   <div key={i} className="flex-shrink-0" style={{ width: 'var(--final-w)' }} />
                 ))}
-
                 {row.tokens.map((token, cIdx) => {
                   const num = row.tokenNumbers[cIdx];
                   const isSolution = cIdx === row.solutionIndex;
@@ -313,27 +345,26 @@ const App: React.FC = () => {
                   const isSameNumber = num !== null && num === currentCellNumber;
                   const userVal = gridState[rIdx][cIdx];
                   const isWrong = userVal !== "" && userVal !== token;
+                  
+                  // Kleurbepaling logica
+                  let cellBg = isSolution ? 'bg-pink-50 border-pink-200 ring-inset ring-1 ring-pink-100 shadow-sm' : 'bg-white border-slate-300';
+                  if (isSelected) {
+                    cellBg = 'border-blue-600 bg-white ring-2 ring-blue-500/20 z-20 shadow-sm scale-[1.05]';
+                  } else if (isSameNumber) {
+                    cellBg = 'bg-blue-50 border-blue-200';
+                  } else if (correctRows[rIdx]) {
+                    // Als het goed is: alleen groene achtergrond als het GEEN oplossingscel is
+                    if (!isSolution) {
+                      cellBg = 'text-green-600 border-green-200 bg-green-50/30';
+                    }
+                  }
 
                   return (
-                    <div 
-                      key={cIdx} 
-                      className="relative flex-shrink-0" 
-                      style={{ width: 'var(--final-w)', height: 'calc(var(--final-w) * 1.35)' }}
-                    >
-                      {num !== null && (
-                        <span className={`absolute top-[1px] left-[2px] text-[7px] font-black z-10 pointer-events-none leading-none ${isSelected ? 'text-blue-600' : 'text-slate-400'}`}>
-                          {num}
-                        </span>
-                      )}
+                    <div key={cIdx} className="relative flex-shrink-0" style={{ width: 'var(--final-w)', height: 'calc(var(--final-w) * 1.35)' }}>
+                      {num !== null && <span className={`absolute top-[1px] left-[2px] text-[7px] font-black z-10 pointer-events-none leading-none ${isSelected ? 'text-blue-600' : 'text-slate-400'}`}>{num}</span>}
                       <div
                         onClick={() => { setCurrentRowIdx(rIdx); setCurrentColIdx(cIdx); }}
-                        className={`
-                          w-full h-full flex items-center justify-center font-black uppercase border-[0.5px] transition-all cursor-pointer
-                          ${isSelected ? 'border-blue-600 bg-white ring-2 ring-blue-500/20 z-20 shadow-sm scale-[1.05]' : 'border-slate-300'}
-                          ${isSolution ? 'bg-pink-50 border-pink-200 ring-inset ring-1 ring-pink-100 shadow-sm' : 'bg-white'}
-                          ${isSameNumber && !isSelected ? 'bg-blue-50 border-blue-200' : ''}
-                          ${correctRows[rIdx] ? 'text-green-600 border-green-200 bg-green-50/30' : isWrong ? 'text-red-500' : 'text-slate-800'}
-                        `}
+                        className={`w-full h-full flex items-center justify-center font-black uppercase border-[0.5px] transition-all cursor-pointer ${cellBg} ${correctRows[rIdx] ? 'text-green-600' : isWrong ? 'text-red-500' : 'text-slate-800'}`}
                         style={{ fontSize: 'calc(var(--final-w) * 0.75)' }}
                       >
                         {userVal}
@@ -352,10 +383,7 @@ const App: React.FC = () => {
                 {ALPHABET.slice(0, 14).map((letter) => {
                   const num = revealedMappings[letter];
                   return (
-                    <div 
-                      key={letter} 
-                      className="flex flex-col items-center flex-1 max-w-[32px] bg-white border border-slate-200 rounded-sm shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden transition-transform active:scale-110"
-                    >
+                    <div key={letter} className="flex flex-col items-center flex-1 max-w-[32px] bg-white border border-slate-200 rounded-sm shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden transition-transform active:scale-110">
                       <div className="h-3 w-full flex items-center justify-center bg-yellow-100/30 border-b border-slate-100">
                         <span className="text-[7px] font-black text-blue-600 leading-none">{num || ""}</span>
                       </div>
@@ -370,10 +398,7 @@ const App: React.FC = () => {
                 {ALPHABET.slice(14).map((letter) => {
                   const num = revealedMappings[letter];
                   return (
-                    <div 
-                      key={letter} 
-                      className="flex flex-col items-center flex-1 max-w-[32px] bg-white border border-slate-200 rounded-sm shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden transition-transform active:scale-110"
-                    >
+                    <div key={letter} className="flex flex-col items-center flex-1 max-w-[32px] bg-white border border-slate-200 rounded-sm shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden transition-transform active:scale-110">
                       <div className="h-3 w-full flex items-center justify-center bg-yellow-100/30 border-b border-slate-100">
                         <span className="text-[7px] font-black text-blue-600 leading-none">{num || ""}</span>
                       </div>
@@ -389,9 +414,52 @@ const App: React.FC = () => {
 
         {isKeyboardVisible && (
           <VirtualKeyboard 
-            layout={layout}
-            onKeyPress={handleVirtualKey} onBackspace={handleBackspace}
+            layout={layout} 
+            onKeyPress={handleVirtualKey} 
+            onBackspace={handleBackspace} 
+            onToggleLayout={toggleKeyboardLayout}
           />
+        )}
+
+        {isHistoryOpen && (
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
+              <div className="p-4 bg-blue-600 text-white flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <List size={20} />
+                  <h3 className="font-black uppercase tracking-tight text-sm">Geleerde Woorden ({history.length})</h3>
+                </div>
+                <button onClick={() => setHistoryOpen(false)} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
+                {history.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                    <List size={40} className="mb-2 opacity-20" />
+                    <p className="font-medium italic">Nog geen woorden gevonden...</p>
+                  </div>
+                ) : (
+                  <div className="columns-2 gap-4 space-y-1">
+                    {[...history].sort().map((word, idx) => (
+                      <div key={idx} className="break-inside-avoid text-[11px] py-0.5 border-b border-slate-100 flex items-baseline gap-1.5">
+                        <span className="text-blue-500 font-bold w-5 inline-block text-[9px]">{idx + 1}.</span>
+                        <span className="font-normal uppercase text-slate-700 tracking-tight">{word}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="p-4 border-t border-slate-100 bg-white">
+                <button 
+                  onClick={handleNuclearReset}
+                  className="w-full bg-red-50 text-red-600 py-3 rounded-xl font-black text-xs uppercase tracking-widest border border-red-100 hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                >
+                  WIS ALLES & RESET TELLER
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {gameState === 'won' && (
@@ -404,14 +472,9 @@ const App: React.FC = () => {
               <div className="bg-blue-50 p-5 rounded-2xl mb-6 border border-blue-100 shadow-sm">
                 <p className="text-blue-500 text-[10px] uppercase font-black mb-1 tracking-widest">Verticaal Woord</p>
                 <p className="text-3xl font-black text-blue-700 tracking-tighter uppercase mb-2">{puzzle.solutionWord}</p>
-                <p className="text-slate-600 italic text-xs leading-relaxed px-2">"{puzzle.solutionDefinition}"</p>
+                <p className="text-slate-700 italic text-sm font-medium leading-relaxed px-2">"{puzzle.solutionDefinition}"</p>
               </div>
-              <button 
-                onClick={startNewGame} 
-                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-base uppercase tracking-widest shadow-xl active:scale-95 transition-transform"
-              >
-                Volgende Puzzel
-              </button>
+              <button onClick={startNewGame} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-base uppercase tracking-widest shadow-xl active:scale-95 transition-transform">Nieuw</button>
             </div>
           </div>
         )}

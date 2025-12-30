@@ -1,51 +1,45 @@
 
 import React from 'react';
-import { RefreshCw, Lightbulb, Play, Keyboard as KeyboardIcon } from 'lucide-react';
+import { RefreshCw, Lightbulb, Play, ChevronRight } from 'lucide-react';
 import { KeyboardLayout } from '../types';
 
 interface GameControlsProps {
   onNewGame: () => void;
   onHint: () => void;
+  onNextWord: () => void;
   onReset: () => void;
   isKeyboardVisible: boolean;
-  layout: KeyboardLayout;
-  toggleKeyboard: () => void;
   onCheck: () => void;
   density: number;
   setDensity: (d: number) => void;
 }
 
 const GameControls: React.FC<GameControlsProps> = ({ 
-  onNewGame, onHint, onReset, isKeyboardVisible, layout, toggleKeyboard, onCheck, density, setDensity
+  onNewGame, onHint, onNextWord, onReset, density, setDensity
 }) => {
-  const getKeyboardLabel = () => {
-    if (!isKeyboardVisible) return 'Toetsen';
-    return layout === 'AZERTY' ? 'Azerty' : 'Qwerty';
-  };
-
   return (
-    <div className="flex flex-col bg-white border-b border-slate-200">
-      <div className="flex items-center justify-between gap-1 p-1 px-2 h-12">
-        {/* Linker groep */}
-        <div className="flex gap-0.5 items-center">
+    <div className="flex flex-col bg-white border-b border-slate-200 shadow-sm relative z-20">
+      <div className="flex items-center justify-between gap-1 p-1 px-2 h-14">
+        {/* Linkse Groep: Systeem acties */}
+        <div className="flex gap-1 items-center">
           <button 
             onClick={onNewGame} 
-            className="flex flex-col items-center justify-center p-1 text-[8px] font-bold text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+            className="flex flex-col items-center justify-center w-10 h-10 text-[8px] font-bold text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100"
           >
-            <Play size={14} />
+            <Play size={16} />
             <span>Nieuw</span>
           </button>
           <button 
             onClick={onReset} 
-            className="flex flex-col items-center justify-center p-1 text-[8px] font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+            className="flex flex-col items-center justify-center w-10 h-10 text-[8px] font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
           >
-            <RefreshCw size={14} />
+            <RefreshCw size={16} />
             <span>Wis</span>
           </button>
         </div>
 
-        {/* Centrale Schuifbalk (Dichtheid) met Percentage */}
-        <div className="flex-1 px-2 flex items-center justify-center gap-2 min-w-[80px] max-w-[140px]">
+        {/* Midden: Moeilijkheidsgraad Slider */}
+        <div className="flex-1 px-4 flex flex-col items-center justify-center gap-1 min-w-[60px] max-w-[140px]">
           <input 
             type="range" 
             min="0.1" 
@@ -53,31 +47,29 @@ const GameControls: React.FC<GameControlsProps> = ({
             step="0.1" 
             value={density} 
             onChange={(e) => setDensity(parseFloat(e.target.value))}
-            className="flex-1 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
           />
-          <span className="text-[9px] font-black text-slate-400 w-6 text-right">
-            {Math.round(density * 100)}%
+          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">
+            Vulling: {Math.round(density * 100)}%
           </span>
         </div>
 
-        {/* Rechter groep */}
-        <div className="flex gap-0.5 items-center">
+        {/* Rechtse Groep: Hulp acties */}
+        <div className="flex gap-1.5 items-center">
           <button 
             onClick={onHint} 
-            className="flex flex-col items-center justify-center p-1 text-[8px] font-bold text-slate-500 hover:text-yellow-600 hover:bg-yellow-50 rounded transition-colors"
+            className="flex flex-col items-center justify-center px-4 py-1 h-11 min-w-[56px] text-[10px] font-normal text-amber-600 bg-transparent border border-amber-300 rounded-xl shadow-sm hover:bg-amber-50 hover:text-amber-700 transition-all active:scale-95 group"
           >
-            <Lightbulb size={14} />
-            <span>Hint</span>
+            <Lightbulb size={20} className="mb-0.5 text-amber-500 group-hover:scale-110 transition-transform" />
+            <span className="uppercase tracking-tighter">Hint</span>
           </button>
           
           <button 
-            onClick={toggleKeyboard} 
-            className={`flex flex-col items-center justify-center p-1 min-w-[44px] text-[8px] font-bold rounded transition-all duration-200 ${isKeyboardVisible ? 'text-blue-600 bg-blue-50 shadow-inner' : 'text-slate-500 hover:bg-slate-100'}`}
+            onClick={onNextWord} 
+            className="flex flex-col items-center justify-center w-10 h-10 text-[8px] font-bold text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100"
           >
-            <KeyboardIcon size={14} className={isKeyboardVisible ? 'mb-0.5' : 'mb-0'} />
-            <span className="leading-tight">
-              {getKeyboardLabel()}
-            </span>
+            <ChevronRight size={18} />
+            <span>Volgende</span>
           </button>
         </div>
       </div>

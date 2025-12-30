@@ -1,12 +1,12 @@
 
 import React from 'react';
-import { Delete } from 'lucide-react';
+import { Delete, RotateCcw } from 'lucide-react';
 import { KeyboardLayout } from '../types';
 
 interface KeyboardProps {
   onKeyPress: (key: string) => void;
   onBackspace: () => void;
-  onEnter?: () => void;
+  onToggleLayout: () => void;
   layout: KeyboardLayout;
 }
 
@@ -23,7 +23,7 @@ const LAYOUTS = {
   ]
 };
 
-const VirtualKeyboard: React.FC<KeyboardProps> = ({ onKeyPress, onBackspace, onEnter, layout }) => {
+const VirtualKeyboard: React.FC<KeyboardProps> = ({ onKeyPress, onBackspace, onToggleLayout, layout }) => {
   const keys = LAYOUTS[layout];
 
   return (
@@ -38,22 +38,37 @@ const VirtualKeyboard: React.FC<KeyboardProps> = ({ onKeyPress, onBackspace, onE
                 className={`
                   h-10 sm:h-12 bg-white rounded-lg shadow-[0_2px_0_0_#cbd5e1] font-black text-slate-800 
                   active:bg-slate-100 active:shadow-none active:translate-y-[2px] 
-                  transition-all flex items-center justify-center border border-slate-200/50
-                  ${key === 'IJ' ? 'flex-[1.5] text-[10px] sm:text-xs' : 'flex-1 text-sm sm:text-lg'}
+                  transition-all flex items-center justify-center border border-slate-200/50 flex-1
+                  ${key === 'IJ' ? 'text-[10px] sm:text-xs' : 'text-sm sm:text-lg'}
                 `}
               >
                 {key}
               </button>
             ))}
+            
+            {/* Specifieke knoppen voor de laatste rij */}
             {rIndex === 2 && (
-               <button
-                onClick={onBackspace}
-                className="flex-[1.5] h-10 sm:h-12 bg-slate-400 rounded-lg shadow-[0_2px_0_0_#64748b] text-white 
-                active:bg-slate-500 active:shadow-none active:translate-y-[2px] 
-                transition-all flex items-center justify-center border border-slate-500/20"
-              >
-                <Delete size={18} />
-              </button>
+              <>
+                {/* Layout Wissel Knop: Tussen IJ en Backspace */}
+                <button
+                  onClick={onToggleLayout}
+                  className="flex-1 h-10 sm:h-12 bg-blue-500 rounded-lg shadow-[0_2px_0_0_#2563eb] text-white font-black text-[8px] sm:text-[10px] uppercase
+                  active:bg-blue-600 active:shadow-none active:translate-y-[2px] 
+                  transition-all flex items-center justify-center border border-blue-600/20"
+                >
+                  {layout === 'AZERTY' ? 'AZ' : 'QW'}
+                </button>
+
+                {/* Backspace Knop */}
+                <button
+                  onClick={onBackspace}
+                  className="flex-1 h-10 sm:h-12 bg-slate-400 rounded-lg shadow-[0_2px_0_0_#64748b] text-white 
+                  active:bg-slate-500 active:shadow-none active:translate-y-[2px] 
+                  transition-all flex items-center justify-center border border-slate-500/20"
+                >
+                  <Delete size={18} />
+                </button>
+              </>
             )}
           </div>
         ))}
